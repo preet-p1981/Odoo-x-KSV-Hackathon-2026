@@ -1,0 +1,213 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  PROCUREMENT_OFFICER
+  VENDOR
+}
+
+enum VendorStatus {
+  ACTIVE
+  INACTIVE
+  BLACKLISTED
+}
+
+enum RFQStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  CANCELLED
+}
+
+enum QuotationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum POStatus {
+  DRAFT
+  ISSUED
+  DELIVERED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  password     String
+  name         String
+  role         Role          @default(PROCUREMENT_OFFICER)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  rfqs         RFQ[]
+  approvals    Approval[]
+  activityLogs ActivityLog[]
+}
+
+model Vendor {
+  id             String           @id @default(uuid())
+  name           String
+  email          String           @unique
+  phone          String?
+  address        String?
+  category       String?
+  gstNumber      String?
+  status         VendorStatus     @default(ACTIVE)
+  rating         Float?           @default(0)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  rfqVendors     RFQVendor[]
+  quotations     Quotation[]
+  purchaseOrders PurchaseOrder[]
+}
+
+model RFQ {
+  id          String       @id @default(uuid())
+  rfqNumber   String       @unique @default(cuid())
+  title       String
+  description String?
+  deadline    DateTime
+  status      RFQStatus    @default(DRAFT)
+  createdBy   User         @relation(fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  items       RFQItem[]
+  vendors     RFQVendor[]
+  quotations  Quotation[]
+  attachments Attachment[]
+}
+
+model RFQItem {
+  id          String  @id @default(uuid())
+  rfq         RFQ     @relation(fields: [rfqId], references: [id])
+  rfqId       String
+  name        String
+  description String?
+  quantity    Int
+  unit        String?
+}
+
+model RFQVendor {
+  rfq       RFQ      @relation(fields: [rfqId], references: [id])
+  rfqId     String
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  vendorId  String
+  invitedAt DateTime @default(now())
+
+  @@id([rfqId, vendorId])
+}
+
+model Quotation {
+  id              String          @id @default(uuid())
+  quotationNumber String          @unique @default(cuid())
+  rfq             RFQ             @relation(fields: [rfqId], references: [id])
+  rfqId           String
+  vendor          Vendor          @relation(fields: [vendorId], references: [id])
+  vendorId        String
+  totalAmount     Float
+  deliveryDays    Int
+  notes           String?
+  status          QuotationStatus @default(SUBMITTED)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  items           QuotationItem[]
+  approval        Approval?
+  purchaseOrder   PurchaseOrder?
+}
+
+model QuotationItem {
+  id          String    @id @default(uuid())
+  quotation   Quotation @relation(fields: [quotationId], references: [id])
+  quotationId String
+  name        String
+  quantity    Int
+  unitPrice   Float
+  totalPrice  Float
+}
+
+model Approval {
+  id          String         @id @default(uuid())
+  quotation   Quotation      @relation(fields: [quotationId], references: [id])
+  quotationId String         @unique
+  approver    User           @relation(fields: [approverId], references: [id])
+  approverId  String
+  status      ApprovalStatus @default(PENDING)
+  remarks     String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model PurchaseOrder {
+  id          String    @id @default(uuid())
+  poNumber    String    @unique @default(cuid())
+  quotation   Quotation @relation(fields: [quotationId], references: [id])
+  quotationId String    @unique
+  vendor      Vendor    @relation(fields: [vendorId], references: [id])
+  vendorId    String
+  totalAmount Float
+  taxAmount   Float     @default(0)
+  grandTotal  Float
+  status      POStatus  @default(DRAFT)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  invoice     Invoice?
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  invoiceNumber   String        @unique @default(cuid())
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrderId String        @unique
+  dueDate         DateTime
+  status          InvoiceStatus @default(DRAFT)
+  sentAt          DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Attachment {
+  id        String   @id @default(uuid())
+  rfq       RFQ      @relation(fields: [rfqId], references: [id])
+  rfqId     String
+  fileName  String
+  fileUrl   String
+  fileSize  Int?
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+}
